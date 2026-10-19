@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PG34WCDN Control
+GenericName=Monitor Settings
+Comment=Change ASUS PG34WCDN monitor settings without the OSD joystick
+Exec=pg34ctl-gui
+Icon=video-display
+Categories=Settings;HardwareSettings;Qt;
+Keywords=monitor;display;ddc;asus;rog;oled;aspect;
