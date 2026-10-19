@@ -11,12 +11,23 @@ pg34ctl aspect 21:9      # back to 3440x1440
 pg34ctl                  # open the settings window
 ```
 
+![The settings window](docs/screenshot.png)
+
+> **Status:** works on Linux (tested on Fedora / KDE Plasma 6, AMD GPU, firmware MCM102).
+> **Windows support is experimental:** the backend is written against the documented
+> Win32 APIs but has not run on Windows yet. Reports are welcome.
+>
+> **Other monitors:** only the PG34WCDN is supported. Other ASUS ROG monitors share most
+> DDC/CI codes, but the OSD menu path used for the aspect switch is model-specific and
+> the code refuses to run on anything else. Pull requests that add a model, with its
+> mapped menu path, are welcome.
+
 ## Install
 
 Needs [uv](https://docs.astral.sh/uv/).
 
 ```sh
-uv tool install /path/to/pg34ctl      # puts pg34ctl and pg34ctl-gui on PATH
+uv tool install git+https://github.com/Tiaxi/pg34ctl   # puts pg34ctl and pg34ctl-gui on PATH
 ```
 
 **Linux:** DDC/CI needs the `i2c-dev` kernel module and access to `/dev/i2c-*`. If
@@ -76,3 +87,8 @@ uv run ruff check . && uv run ruff format .
 ```
 
 The Windows backend is checked for struct layouts but has not yet run on Windows.
+
+## License
+
+MIT. Not affiliated with or endorsed by ASUS. ROG, ROG Swift and DisplayWidget Center
+are trademarks of ASUSTeK Computer Inc.

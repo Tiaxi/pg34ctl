@@ -7,7 +7,13 @@ name = "pg34ctl"
 version = "0.1.0"
 description = "Control the ASUS ROG Swift OLED PG34WCDN over DDC/CI on Linux and Windows"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+readme = "README.md"
 dependencies = ["pyside6-essentials>=6.8,<7"]
+
+[project.urls]
+Repository = "https://github.com/Tiaxi/pg34ctl"
 
 [project.scripts]
 pg34ctl = "pg34ctl.cli:main"
