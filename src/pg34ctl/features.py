@@ -44,6 +44,8 @@ class Feature:
     note: str = ""
     confirm: str = ""  # non-empty: ask before writing, with this warning
     zero_clears_word: bool = False  # writing 0 must clear the whole shared word
+    # (mask, value) to fill in when writing a non-zero value finds those bits empty
+    fill_if_empty: tuple[int, int] | None = None
 
     @property
     def shift(self) -> int:
@@ -58,7 +60,10 @@ class Feature:
             value = 1 if value else 0
         if value == 0 and self.zero_clears_word:
             return 0
-        return (word & ~self.mask & 0xFFFF) | ((value << self.shift) & self.mask)
+        word = (word & ~self.mask & 0xFFFF) | ((value << self.shift) & self.mask)
+        if value and self.fill_if_empty and not word & self.fill_if_empty[0]:
+            word |= self.fill_if_empty[1]
+        return word
 
     def label_for(self, value: int) -> str:
         if self.kind is Kind.TOGGLE:
@@ -295,6 +300,7 @@ FEATURES: list[Feature] = [
         },
         mask=0x00FF,
         zero_clears_word=True,  # the monitor rejects "off" with a stale colour byte
+        fill_if_empty=(0xFF00, 0x0100),  # after "off" the colour byte is 0; pick Red
     ),
     Feature(
         "aura_color",

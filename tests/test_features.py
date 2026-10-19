@@ -74,3 +74,27 @@ def test_read_all_reads_shared_registers_once():
 def test_unsupported_feature_is_reported_not_raised():
     states = Monitor(FakeMonitor()).read_all([BY_KEY["crosshair"]])
     assert states["crosshair"].value is None and states["crosshair"].error
+
+
+def test_aura_effect_after_off_gets_a_valid_colour():
+    assert BY_KEY["aura_effect"].encode(0x0000, 0x04) == 0x0104
+    assert BY_KEY["aura_effect"].encode(0x0300, 0x04) == 0x0304
+
+
+def test_oled_toggle_never_echoes_the_pixel_cleaning_bit():
+    fake = FakeMonitor({0xFD: (0x7879, 0x787D)})  # cleaning bit 0x10 reads back set
+    Monitor(fake).write(BY_KEY["vrr"], 0)
+    assert fake.writes == [(0xFD, 0x7868)]
+
+
+def test_full_word_toggle_is_normalised():
+    fake = FakeMonitor({0x5F: (0, 5)})
+    Monitor(fake).write(BY_KEY["adjustable_hdr"], 5)
+    assert fake.writes == [(0x5F, 1)]
+
+
+def test_range_is_checked_against_the_monitor_maximum():
+    import pytest
+
+    with pytest.raises(ValueError, match="0-100"):
+        Monitor(FakeMonitor()).write(BY_KEY["brightness"], 101)

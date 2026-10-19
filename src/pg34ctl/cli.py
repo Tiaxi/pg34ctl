@@ -195,7 +195,7 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(f"pg34ctl: {exc}")
     try:
         COMMANDS[args.command](monitor, args)
-    except (AspectError, DdcError, ValueError) as exc:
+    except (AspectError, DdcError, MonitorNotFound, ValueError, OSError) as exc:
         sys.exit(f"pg34ctl: {exc}")
     finally:
         monitor.close()

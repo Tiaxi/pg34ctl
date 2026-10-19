@@ -11,7 +11,7 @@ import time
 import winreg
 from ctypes import wintypes
 
-from . import EDID_PRODUCT, EDID_VENDOR, MonitorNotFound
+from . import EDID_PRODUCT, EDID_VENDOR, EZ_OSD, MonitorNotFound
 from .protocol import DdcError, UnsupportedFeature, VcpReading
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -202,24 +202,33 @@ class WindowsDdc:
         self._open()
 
     def _open(self) -> None:
+        # Open the new handle before releasing the old one, so a failed re-discovery
+        # (the monitor is mid re-enumeration) never leaves us holding a dead handle.
+        hmonitor, gdi_device, instance = _find()
+        try:
+            handle = _physical_handle(hmonitor)
+        except OSError as exc:
+            raise DdcError(f"cannot open the physical monitor: {exc}") from exc
         if self._handle:
             dxva2.DestroyPhysicalMonitor(self._handle)
-        hmonitor, self.gdi_device, self.instance = _find()
-        self._handle = _physical_handle(hmonitor)
-        self.description = f"{self.gdi_device} ({self.instance})"
+        self._handle, self.gdi_device, self.instance = handle, gdi_device, instance
+        self.description = f"{gdi_device} ({instance})"
 
-    def _call(self, func, *args):
-        for attempt in range(4):
+    def _call(self, func, *args, attempts: int = 4):
+        error = 0
+        for attempt in range(attempts):
             if func(self._handle, *args):
                 return
             error = ctypes.get_last_error() & 0xFFFFFFFF
             if error == ERROR_GRAPHICS_DDCCI_VCP_NOT_SUPPORTED:
                 raise UnsupportedFeature(f"{func.__name__}{args[:1]} is not supported")
+            if attempt + 1 == attempts:
+                break
             time.sleep(0.1 * (attempt + 1))
             if attempt == 1:
                 try:
                     self._open()
-                except MonitorNotFound:
+                except (MonitorNotFound, DdcError):
                     pass
         raise DdcError(f"{func.__name__} failed: {ctypes.FormatError(error)}")
 
@@ -235,7 +244,9 @@ class WindowsDdc:
         return VcpReading(code, current.value, maximum.value, continuous=kind.value == 1)
 
     def set_vcp(self, code: int, value: int) -> None:
-        self._call(dxva2.SetVCPFeature, code, value)
+        # A remote OSD press that reports failure may still have reached the monitor;
+        # repeating it would move the menu cursor twice.
+        self._call(dxva2.SetVCPFeature, code, value, attempts=1 if code == EZ_OSD else 4)
 
     def capabilities(self) -> str:
         length = wintypes.DWORD()
@@ -289,4 +300,7 @@ class WindowsDdc:
 
 
 def open_windows_backend() -> WindowsDdc:
-    return WindowsDdc()
+    try:
+        return WindowsDdc()
+    except OSError as exc:
+        raise MonitorNotFound(f"cannot open the PG34WCDN: {exc}") from exc

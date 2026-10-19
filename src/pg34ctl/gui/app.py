@@ -72,13 +72,13 @@ class Worker(QObject):
         try:
             if self.monitor is None:
                 self.monitor = Monitor(open_backend())
-                self.connected.emit(
-                    {
-                        "description": self.monitor.backend.description,
-                        "firmware": self.monitor.firmware(),
-                        "hours": self.monitor.usage_hours(),
-                    }
-                )
+                info = {"description": self.monitor.backend.description}
+                try:
+                    info["firmware"] = self.monitor.firmware()
+                    info["hours"] = self.monitor.usage_hours()
+                except DdcError:
+                    pass
+                self.connected.emit(info)
             action(*args)
         except (MonitorNotFound, DdcError, AspectError, ValueError, OSError) as exc:
             self.failed.emit(str(exc))
@@ -97,11 +97,13 @@ class Worker(QObject):
     def write(self, key: str, value: int) -> None:
         def action():
             feature = BY_KEY[key]
-            state = self.monitor.write(feature, value)
+            self.monitor.write(feature, value)
             if feature.code in MODE_CHANGING:
                 self._refresh()
             else:
-                self.states.emit({key: state})
+                # Settings sharing this register (e.g. Aura effect + colour) may change too.
+                siblings = [f for f in FEATURES if f.code == feature.code]
+                self.states.emit(self.monitor.read_all(siblings))
             self.message.emit(f"{feature.label} set to {feature.label_for(value)}")
 
         self._run(action)
@@ -189,6 +191,10 @@ class FeatureRow(QWidget):
         self.changed.emit(self.feature.key, self.spin.value())
 
     def show_state(self, state: FeatureState) -> None:
+        if self.feature.kind is Kind.RANGE and (
+            self._debounce.isActive() or self.slider.isSliderDown()
+        ):
+            return  # the user is mid-change; their value wins
         widgets = self.findChildren(QWidget)
         for widget in widgets:
             widget.blockSignals(True)
@@ -229,6 +235,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("PG34WCDN Control")
         self.resize(720, 640)
         self.rows: dict[str, FeatureRow] = {}
+        self.busy = False
         self.states: dict[str, FeatureState] = {}
 
         self.header = QLabel("Connecting to the monitor…")
@@ -278,6 +285,7 @@ class MainWindow(QMainWindow):
         form = QFormLayout()
         for feature in (f for f in FEATURES if f.tab is tab):
             row = FeatureRow(feature)
+            row.setEnabled(False)  # until the first read arrives
             row.changed.connect(self._on_row_changed)
             self.rows[feature.key] = row
             label = QLabel(feature.label + ("" if feature.verified else " *"))
@@ -339,7 +347,8 @@ class MainWindow(QMainWindow):
     def _on_row_changed(self, key: str, value: int) -> None:
         feature = BY_KEY[key]
         if feature.confirm and not self._confirm(feature.label, feature.confirm):
-            self.rows[key].show_state(self.states[key])
+            if key in self.states:
+                self.rows[key].show_state(self.states[key])
             return
         self.request_write.emit(key, value)
 
@@ -380,15 +389,16 @@ class MainWindow(QMainWindow):
     # Worker results
 
     def _on_connected(self, info: dict) -> None:
-        self.header.setText(
-            f"<b>ASUS ROG Swift PG34WCDN</b> · firmware {info['firmware']} · "
-            f"{info['hours']} h · {info['description']}"
-        )
+        parts = ["<b>ASUS ROG Swift PG34WCDN</b>"]
+        if "firmware" in info:
+            parts += [f"firmware {info['firmware']}", f"{info['hours']} h"]
+        self.header.setText(" · ".join([*parts, info["description"]]))
 
     def _on_states(self, states: dict) -> None:
         self.states.update(states)
-        for key, state in states.items():
-            self.rows[key].show_state(state)
+        # Gated rows depend on other settings, so refresh them on every update.
+        for key in set(states) | (set(GATES) & set(self.states)):
+            self.rows[key].show_state(self.states[key])
         for key, (allowed, reason) in GATES.items():
             state = self.states.get(key)
             if state and state.available and not allowed(self.states):
@@ -410,6 +420,7 @@ class MainWindow(QMainWindow):
             self.header.setWordWrap(True)
 
     def _on_busy(self, busy: bool) -> None:
+        self.busy = busy
         for button in self.aspect_buttons:
             button.setEnabled(not busy)
         if busy:
@@ -418,8 +429,13 @@ class MainWindow(QMainWindow):
             QApplication.restoreOverrideCursor()
 
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        if self.busy:
+            # Quitting mid aspect switch could leave the monitor's menu half-navigated.
+            self.statusBar().showMessage("Wait for the current operation to finish.", 5000)
+            event.ignore()
+            return
         self.thread.quit()
-        self.thread.wait(5000)
+        self.thread.wait()
         if self.worker.monitor:
             self.worker.monitor.close()
         super().closeEvent(event)

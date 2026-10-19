@@ -14,6 +14,7 @@ from .protocol import DdcError, UnsupportedFeature, VcpReading
 __all__ = [
     "DdcBackend",
     "DdcError",
+    "EZ_OSD",
     "MonitorNotFound",
     "UnsupportedFeature",
     "VcpReading",
@@ -21,6 +22,7 @@ __all__ = [
 ]
 
 MODEL = "PG34WCDN"
+EZ_OSD = 0xEB  # ASUS remote OSD joystick; writes to it must never be retried
 EDID_VENDOR = "AUS"
 EDID_PRODUCT = 0xAA29
 

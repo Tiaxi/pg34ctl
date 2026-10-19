@@ -10,9 +10,7 @@ import time
 from collections.abc import Callable, Iterable
 from enum import IntEnum
 
-from .ddc import DdcBackend, DdcError
-
-EZ_OSD = 0xEB
+from .ddc import EZ_OSD, DdcBackend, DdcError
 
 
 class Button(IntEnum):

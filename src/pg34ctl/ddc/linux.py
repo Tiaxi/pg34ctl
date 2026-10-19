@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from ..edid import parse_edid
-from . import EDID_PRODUCT, EDID_VENDOR, MonitorNotFound
+from . import EDID_PRODUCT, EDID_VENDOR, EZ_OSD, MonitorNotFound
 from . import protocol as p
 
 I2C_SLAVE = 0x0703
@@ -48,7 +48,8 @@ class LinuxDdc:
 
     def set_vcp(self, code: int, value: int) -> None:
         last: OSError | None = None
-        for attempt in range(RETRIES):
+        # Never repeat a remote OSD press: it may have landed even if the write errored.
+        for attempt in range(1 if code == EZ_OSD else RETRIES):
             try:
                 os.write(self._fd, p.set_vcp_request(code, value))
                 time.sleep(SET_DELAY)

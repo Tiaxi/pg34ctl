@@ -74,9 +74,18 @@ class Monitor:
     def write(self, feature: Feature, value: int) -> FeatureState:
         if feature.kind is Kind.CHOICE and value not in feature.choices:
             raise ValueError(f"{value!r} is not a valid {feature.label} value")
+        if feature.kind is Kind.TOGGLE:
+            value = 1 if value else 0
+        reading = self.backend.get_vcp(feature.code)
+        if feature.kind is Kind.RANGE and not 0 <= value <= reading.maximum:
+            raise ValueError(f"{feature.label} must be 0-{reading.maximum}, got {value}")
         word = value
-        if feature.mask != 0xFFFF or feature.zero_clears_word:
-            word = feature.encode(self.backend.get_vcp(feature.code).current, value)
+        if feature.mask != 0xFFFF or feature.zero_clears_word or feature.fill_if_empty:
+            word = feature.encode(reading.current, value)
+        if feature.code == 0xFD:
+            # Bit 0x10 starts a pixel cleaning run. Never echo it back when changing
+            # another OLED toggle, or a run in progress could be restarted.
+            word &= ~PIXEL_CLEANING_BIT
         self.backend.set_vcp(feature.code, word)
         return self.read(feature)
 

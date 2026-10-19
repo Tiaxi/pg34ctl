@@ -100,7 +100,7 @@ def switch_aspect(
     press(backend, menu_sequence(target), sleep=sleep)
     on_step("Waiting for the monitor to change mode")
     deadline = clock() + timeout
-    while current_aspect(backend) is not target:
+    while _settled_aspect(backend) is not target:
         if clock() > deadline:
             press(backend, [Button.CLOSE], sleep=sleep)
             raise AspectError(
@@ -121,6 +121,14 @@ def switch_aspect(
         on_step(f"Setting the desktop to {info.preferred_width}x{info.preferred_height}")
         apply_resolution(info.preferred_width, info.preferred_height)
     return True
+
+
+def _settled_aspect(backend: DdcBackend) -> Aspect | None:
+    """The current aspect, or None while the EDID is unreadable mid re-enumeration."""
+    try:
+        return current_aspect(backend)
+    except (AspectError, ValueError, OSError):
+        return None
 
 
 def _apply_scaling(backend: DdcBackend, scaling: Scaling, sleep: Callable[[float], None]) -> None:
