@@ -196,6 +196,11 @@ def _physical_handle(hmonitor: int) -> wintypes.HANDLE:
     return monitors[0].hPhysicalMonitor
 
 
+def _describe(error: int) -> str:
+    # FormatError takes a signed C int, and the DDC/CI errors are 0xC026xxxx.
+    return f"{ctypes.FormatError(ctypes.c_int32(error).value)} (0x{error:08X})"
+
+
 class WindowsDdc:
     def __init__(self) -> None:
         self._handle = None
@@ -230,7 +235,7 @@ class WindowsDdc:
                     self._open()
                 except (MonitorNotFound, DdcError):
                     pass
-        raise DdcError(f"{func.__name__} failed: {ctypes.FormatError(error)}")
+        raise DdcError(f"{func.__name__} failed: {_describe(error)}")
 
     def get_vcp(self, code: int) -> VcpReading:
         kind, current, maximum = wintypes.DWORD(), wintypes.DWORD(), wintypes.DWORD()
